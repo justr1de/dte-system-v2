@@ -3,6 +3,8 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   users,
+  userActivities,
+  ActivityType,
   regioes,
   municipios,
   bairros,
@@ -541,4 +543,97 @@ export async function insertRegiao(data: typeof regioes.$inferInsert) {
   if (!db) return null;
   const result = await db.insert(regioes).values(data);
   return result[0].insertId;
+}
+
+
+// ==================== ATIVIDADES DO USUÁRIO ====================
+
+export async function logUserActivity(data: {
+  userId: number;
+  activityType: ActivityType;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(userActivities).values({
+    userId: data.userId,
+    activityType: data.activityType,
+    description: data.description,
+    metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+    ipAddress: data.ipAddress,
+    userAgent: data.userAgent,
+  });
+}
+
+export async function getUserActivities(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select()
+    .from(userActivities)
+    .where(eq(userActivities.userId, userId))
+    .orderBy(desc(userActivities.createdAt))
+    .limit(limit);
+}
+
+export async function getAllActivities(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: userActivities.id,
+    userId: userActivities.userId,
+    userName: users.name,
+    userEmail: users.email,
+    activityType: userActivities.activityType,
+    description: userActivities.description,
+    metadata: userActivities.metadata,
+    ipAddress: userActivities.ipAddress,
+    createdAt: userActivities.createdAt,
+  })
+    .from(userActivities)
+    .leftJoin(users, eq(userActivities.userId, users.id))
+    .orderBy(desc(userActivities.createdAt))
+    .limit(limit);
+}
+
+// ==================== AVATAR DO USUÁRIO ====================
+
+export async function updateUserAvatar(userId: number, avatarUrl: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ avatarUrl }).where(eq(users.id, userId));
+}
+
+// ==================== CONFIGURAÇÕES DO SISTEMA ====================
+
+export async function getSystemSettings() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(systemSettings);
+}
+
+export async function getSystemSetting(key: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select()
+    .from(systemSettings)
+    .where(eq(systemSettings.settingKey, key))
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function upsertSystemSetting(key: string, value: string, description?: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(systemSettings)
+    .values({ settingKey: key, settingValue: value, description })
+    .onDuplicateKeyUpdate({ set: { settingValue: value, description } });
+}
+
+export async function deleteSystemSetting(key: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(systemSettings).where(eq(systemSettings.settingKey, key));
 }

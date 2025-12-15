@@ -47,6 +47,7 @@ const navItems: NavItem[] = [
   { label: "Mapas de Calor", href: "/mapas", icon: <Map className="w-5 h-5" /> },
   { label: "Importar Dados", href: "/importar", icon: <FileSpreadsheet className="w-5 h-5" />, roles: ["admin", "gestor"] },
   { label: "Usuários", href: "/usuarios", icon: <Shield className="w-5 h-5" />, roles: ["admin"] },
+  { label: "Configurações", href: "/configuracoes", icon: <Settings className="w-5 h-5" />, roles: ["admin"] },
   { label: "Demonstração", href: "/demo", icon: <Eye className="w-5 h-5" /> },
 ];
 

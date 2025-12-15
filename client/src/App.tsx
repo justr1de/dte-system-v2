@@ -18,6 +18,7 @@ import Demo from "./pages/Demo";
 import Relatorios from "./pages/Relatorios";
 import Login from "./pages/Login";
 import Perfil from "./pages/Perfil";
+import Configuracoes from "./pages/Configuracoes";
 
 function Router() {
   return (
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/importar" component={Importar} />
       <Route path="/usuarios" component={Usuarios} />
       <Route path="/perfil" component={Perfil} />
+      <Route path="/configuracoes" component={Configuracoes} />
       
       {/* Fallback */}
       <Route path="/404" component={NotFound} />

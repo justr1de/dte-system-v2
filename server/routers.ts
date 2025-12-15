@@ -151,6 +151,22 @@ const usersRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       await db.updateUserProfile(ctx.user.id, input.name, input.email);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "update",
+        description: "Perfil atualizado",
+      });
+      return { success: true };
+    }),
+  updateAvatar: protectedProcedure
+    .input(z.object({ avatarUrl: z.string().url() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.updateUserAvatar(ctx.user.id, input.avatarUrl);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "update",
+        description: "Foto de perfil atualizada",
+      });
       return { success: true };
     }),
   updateRole: adminProcedure
@@ -163,6 +179,16 @@ const usersRouter = router({
     .mutation(async ({ input }) => {
       await db.updateUserRole(input.userId, input.role);
       return { success: true };
+    }),
+  myActivities: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      return db.getUserActivities(ctx.user.id, input?.limit || 50);
+    }),
+  allActivities: adminProcedure
+    .input(z.object({ limit: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.getAllActivities(input?.limit || 100);
     }),
 });
 
@@ -522,6 +548,47 @@ const demoRouter = router({
 
 // ==================== MAIN ROUTER ====================
 
+// ==================== SETTINGS ROUTER ====================
+
+const settingsRouter = router({
+  list: adminProcedure.query(async () => {
+    return db.getSystemSettings();
+  }),
+  get: adminProcedure
+    .input(z.object({ key: z.string() }))
+    .query(async ({ input }) => {
+      return db.getSystemSetting(input.key);
+    }),
+  upsert: adminProcedure
+    .input(
+      z.object({
+        key: z.string(),
+        value: z.string(),
+        description: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await db.upsertSystemSetting(input.key, input.value, input.description);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "update",
+        description: `Configuração '${input.key}' atualizada`,
+      });
+      return { success: true };
+    }),
+  delete: adminProcedure
+    .input(z.object({ key: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.deleteSystemSetting(input.key);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "delete",
+        description: `Configuração '${input.key}' removida`,
+      });
+      return { success: true };
+    }),
+});
+
 export const appRouter = router({
   system: systemRouter,
   auth: authRouter,
@@ -535,6 +602,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   importacoes: importacoesRouter,
   demo: demoRouter,
+  settings: settingsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -12,6 +12,7 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  avatarUrl: varchar("avatarUrl", { length: 500 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["admin", "gestor", "politico", "demo"]).default("demo").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
@@ -22,6 +23,25 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+// ==================== ATIVIDADES DO USUÁRIO ====================
+
+export const activityTypes = ["login", "logout", "import", "export", "create", "update", "delete", "view", "download"] as const;
+export type ActivityType = (typeof activityTypes)[number];
+
+export const userActivities = mysqlTable("user_activities", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").references(() => users.id).notNull(),
+  activityType: mysqlEnum("activityType", ["login", "logout", "import", "export", "create", "update", "delete", "view", "download"]).notNull(),
+  description: text("description"),
+  metadata: text("metadata"),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: varchar("userAgent", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserActivity = typeof userActivities.$inferSelect;
+export type InsertUserActivity = typeof userActivities.$inferInsert;
 
 // ==================== CONFIGURAÇÕES DO SISTEMA ====================
 

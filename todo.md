@@ -115,3 +115,21 @@
 - [x] Implementar formulário de edição de dados cadastrais
 - [x] Adicionar funcionalidade de alteração de senha
 - [x] Criar rotas de atualização no backend
+
+## Upload de Foto de Perfil
+- [x] Adicionar campo avatarUrl ao schema de usuários
+- [x] Implementar upload de imagem (base64 para demo)
+- [x] Criar componente de upload de foto na página de perfil
+- [x] Exibir foto no avatar do perfil
+
+## Histórico de Atividades
+- [x] Criar tabela de atividades no banco de dados
+- [x] Registrar ações do usuário (login, importação, etc.)
+- [x] Criar página/aba de histórico de atividades
+- [x] Exibir últimas atividades no perfil
+
+## Configurações do Sistema
+- [x] Criar página de configurações para administradores
+- [x] Implementar configurações de aparência (cores, logo)
+- [x] Adicionar configurações de notificações
+- [x] Criar seção de integrações (SSO, APIs)

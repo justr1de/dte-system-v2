@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import DTELayout from "@/components/DTELayout";
@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { 
@@ -24,8 +25,30 @@ import {
   Save, 
   RefreshCw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Upload,
+  History,
+  LogIn,
+  LogOut,
+  FileUp,
+  FileDown,
+  Edit,
+  Trash2,
+  Eye as ViewIcon
 } from "lucide-react";
+
+const activityIcons: Record<string, React.ReactNode> = {
+  login: <LogIn className="h-4 w-4 text-green-500" />,
+  logout: <LogOut className="h-4 w-4 text-gray-500" />,
+  import: <FileUp className="h-4 w-4 text-blue-500" />,
+  export: <FileDown className="h-4 w-4 text-purple-500" />,
+  create: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
+  update: <Edit className="h-4 w-4 text-amber-500" />,
+  delete: <Trash2 className="h-4 w-4 text-red-500" />,
+  view: <ViewIcon className="h-4 w-4 text-cyan-500" />,
+  download: <FileDown className="h-4 w-4 text-indigo-500" />,
+};
 
 export default function Perfil() {
   const { user, loading } = useAuth();
@@ -33,6 +56,8 @@ export default function Perfil() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Profile form state
   const [profileData, setProfileData] = useState({
@@ -47,6 +72,12 @@ export default function Perfil() {
     confirmPassword: "",
   });
 
+  // Fetch user activities
+  const { data: activities, isLoading: activitiesLoading } = trpc.users.myActivities.useQuery(
+    { limit: 20 },
+    { enabled: !!user }
+  );
+
   // Update profile mutation
   const updateProfileMutation = trpc.users.updateProfile.useMutation({
     onSuccess: () => {
@@ -54,6 +85,17 @@ export default function Perfil() {
     },
     onError: (error: { message?: string }) => {
       toast.error(error.message || "Erro ao atualizar perfil");
+    },
+  });
+
+  // Update avatar mutation
+  const updateAvatarMutation = trpc.users.updateAvatar.useMutation({
+    onSuccess: () => {
+      toast.success("Foto de perfil atualizada!");
+      window.location.reload();
+    },
+    onError: (error: { message?: string }) => {
+      toast.error(error.message || "Erro ao atualizar foto");
     },
   });
 
@@ -80,44 +122,61 @@ export default function Perfil() {
     }
   }, [user, loading, navigate]);
 
-  if (loading) {
-    return (
-      <DTELayout>
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-8 h-8 animate-spin text-teal-500" />
-        </div>
-      </DTELayout>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  const handleUpdateProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profileData.name.trim()) {
-      toast.error("Nome é obrigatório");
-      return;
-    }
-    updateProfileMutation.mutate({
-      name: profileData.name,
-      email: profileData.email,
-    });
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione uma imagem válida");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 5MB");
+      return;
+    }
+
+    setUploadingAvatar(true);
+
+    try {
+      // Convert to base64 for demo purposes
+      // In production, you would upload to S3
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        await updateAvatarMutation.mutateAsync({ avatarUrl: base64 });
+        setUploadingAvatar(false);
+      };
+      reader.onerror = () => {
+        toast.error("Erro ao processar imagem");
+        setUploadingAvatar(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      toast.error("Erro ao fazer upload da imagem");
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passwordData.currentPassword) {
-      toast.error("Digite sua senha atual");
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      toast.error("A nova senha deve ter pelo menos 6 caracteres");
-      return;
-    }
+    updateProfileMutation.mutate(profileData);
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error("As senhas não coincidem");
+      return;
+    }
+    if (passwordData.newPassword.length < 8) {
+      toast.error("A nova senha deve ter pelo menos 8 caracteres");
       return;
     }
     changePasswordMutation.mutate({
@@ -128,13 +187,23 @@ export default function Perfil() {
 
   const getRoleBadge = (role: string) => {
     const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-      admin: { label: "Administrador", variant: "default" },
-      gestor: { label: "Gestor de Campanha", variant: "secondary" },
-      politico: { label: "Político", variant: "outline" },
+      admin: { label: "Administrador", variant: "destructive" },
+      gestor: { label: "Gestor de Campanha", variant: "default" },
+      politico: { label: "Político", variant: "secondary" },
       demo: { label: "Demonstração", variant: "outline" },
     };
     const config = roleConfig[role] || { label: role, variant: "outline" as const };
     return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  const formatDate = (date: Date | string) => {
+    return new Date(date).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const getInitials = (name: string) => {
@@ -146,68 +215,74 @@ export default function Perfil() {
       .slice(0, 2);
   };
 
-  const formatDate = (date: Date | string | null) => {
-    if (!date) return "N/A";
-    return new Date(date).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  if (loading) {
+    return (
+      <DTELayout>
+        <div className="flex items-center justify-center h-96">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DTELayout>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <DTELayout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Meu Perfil</h1>
-          <p className="text-slate-500 mt-1">Gerencie suas informações pessoais e configurações de conta</p>
+        <div className="flex items-center gap-6">
+          <div className="relative group">
+            <Avatar className="h-24 w-24 border-4 border-primary/20 cursor-pointer" onClick={handleAvatarClick}>
+              <AvatarImage src={(user as { avatarUrl?: string }).avatarUrl || undefined} alt={user.name || "Avatar"} />
+              <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+                {getInitials(user.name || "U")}
+              </AvatarFallback>
+            </Avatar>
+            <div 
+              className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+              onClick={handleAvatarClick}
+            >
+              {uploadingAvatar ? (
+                <RefreshCw className="h-6 w-6 text-white animate-spin" />
+              ) : (
+                <Camera className="h-6 w-6 text-white" />
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">{user.name || "Usuário"}</h1>
+            <p className="text-muted-foreground">{user.email}</p>
+            <div className="mt-2">{getRoleBadge(user.role)}</div>
+          </div>
         </div>
 
-        {/* Profile Overview Card */}
-        <Card className="bg-gradient-to-r from-teal-500 to-emerald-500 text-white border-0">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-6">
-              <Avatar className="w-20 h-20 border-4 border-white/30">
-                <AvatarFallback className="bg-white/20 text-white text-2xl font-bold">
-                  {getInitials(user.name || "U")}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold">{user.name || "Usuário"}</h2>
-                <p className="text-white/80">{user.email}</p>
-                <div className="mt-2">{getRoleBadge(user.role)}</div>
-              </div>
-              <div className="text-right text-sm text-white/70">
-                <div className="flex items-center gap-2 justify-end">
-                  <Calendar className="w-4 h-4" />
-                  <span>Membro desde {formatDate(user.createdAt)}</span>
-                </div>
-                <div className="flex items-center gap-2 justify-end mt-1">
-                  <Clock className="w-4 h-4" />
-                  <span>Último acesso {formatDate(user.lastSignedIn)}</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Tabs */}
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="bg-slate-100">
-            <TabsTrigger value="profile" className="data-[state=active]:bg-white">
-              <User className="w-4 h-4 mr-2" />
-              Dados Pessoais
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+            <TabsTrigger value="profile" className="gap-2">
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Dados Pessoais</span>
             </TabsTrigger>
-            <TabsTrigger value="security" className="data-[state=active]:bg-white">
-              <Lock className="w-4 h-4 mr-2" />
-              Segurança
+            <TabsTrigger value="security" className="gap-2">
+              <Lock className="h-4 w-4" />
+              <span className="hidden sm:inline">Segurança</span>
             </TabsTrigger>
-            <TabsTrigger value="account" className="data-[state=active]:bg-white">
-              <Shield className="w-4 h-4 mr-2" />
-              Conta
+            <TabsTrigger value="activity" className="gap-2">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">Atividades</span>
+            </TabsTrigger>
+            <TabsTrigger value="account" className="gap-2">
+              <Shield className="h-4 w-4" />
+              <span className="hidden sm:inline">Conta</span>
             </TabsTrigger>
           </TabsList>
 
@@ -215,64 +290,53 @@ export default function Perfil() {
           <TabsContent value="profile">
             <Card>
               <CardHeader>
-                <CardTitle>Informações Pessoais</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Dados Pessoais
+                </CardTitle>
                 <CardDescription>
-                  Atualize suas informações de perfil. Essas informações serão exibidas em todo o sistema.
+                  Atualize suas informações pessoais
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleUpdateProfile} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <form onSubmit={handleProfileSubmit} className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="name">Nome Completo</Label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="name"
-                          type="text"
                           placeholder="Seu nome completo"
+                          className="pl-10"
                           value={profileData.name}
                           onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                          className="pl-10"
                         />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="email"
                           type="email"
                           placeholder="seu@email.com"
+                          className="pl-10"
                           value={profileData.email}
                           onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                          className="pl-10"
                         />
                       </div>
                     </div>
                   </div>
-
-                  <Separator />
-
                   <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      className="bg-teal-600 hover:bg-teal-700"
-                      disabled={updateProfileMutation.isPending}
-                    >
+                    <Button type="submit" disabled={updateProfileMutation.isPending}>
                       {updateProfileMutation.isPending ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                          Salvando...
-                        </>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <>
-                          <Save className="w-4 h-4 mr-2" />
-                          Salvar Alterações
-                        </>
+                        <Save className="mr-2 h-4 w-4" />
                       )}
+                      Salvar Alterações
                     </Button>
                   </div>
                 </form>
@@ -284,126 +348,146 @@ export default function Perfil() {
           <TabsContent value="security">
             <Card>
               <CardHeader>
-                <CardTitle>Alterar Senha</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Alterar Senha
+                </CardTitle>
                 <CardDescription>
-                  Mantenha sua conta segura atualizando sua senha regularmente.
+                  Mantenha sua conta segura com uma senha forte
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleChangePassword} className="space-y-6">
-                  <div className="space-y-4 max-w-md">
+                <form onSubmit={handlePasswordSubmit} className="space-y-6">
+                  <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="currentPassword">Senha Atual</Label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="currentPassword"
                           type={showCurrentPassword ? "text" : "password"}
                           placeholder="Digite sua senha atual"
+                          className="pl-10 pr-10"
                           value={passwordData.currentPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                          className="pl-10 pr-10"
                         />
                         <button
                           type="button"
+                          className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                           onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
-                          {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
-
+                    <Separator />
                     <div className="space-y-2">
                       <Label htmlFor="newPassword">Nova Senha</Label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="newPassword"
                           type={showNewPassword ? "text" : "password"}
-                          placeholder="Mínimo 6 caracteres"
+                          placeholder="Digite a nova senha"
+                          className="pl-10 pr-10"
                           value={passwordData.newPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                          className="pl-10 pr-10"
                         />
                         <button
                           type="button"
+                          className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                           onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
-                          {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="confirmPassword"
                           type={showConfirmPassword ? "text" : "password"}
-                          placeholder="Repita a nova senha"
+                          placeholder="Confirme a nova senha"
+                          className="pl-10 pr-10"
                           value={passwordData.confirmPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                          className="pl-10 pr-10"
                         />
                         <button
                           type="button"
+                          className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
-                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
                   </div>
-
-                  {/* Password Requirements */}
-                  <div className="bg-slate-50 rounded-lg p-4 max-w-md">
-                    <h4 className="font-medium text-slate-700 mb-2">Requisitos da senha:</h4>
-                    <ul className="space-y-1 text-sm">
-                      <li className={`flex items-center gap-2 ${passwordData.newPassword.length >= 6 ? "text-green-600" : "text-slate-500"}`}>
-                        {passwordData.newPassword.length >= 6 ? (
-                          <CheckCircle2 className="w-4 h-4" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4" />
-                        )}
-                        Mínimo de 6 caracteres
-                      </li>
-                      <li className={`flex items-center gap-2 ${passwordData.newPassword === passwordData.confirmPassword && passwordData.confirmPassword ? "text-green-600" : "text-slate-500"}`}>
-                        {passwordData.newPassword === passwordData.confirmPassword && passwordData.confirmPassword ? (
-                          <CheckCircle2 className="w-4 h-4" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4" />
-                        )}
-                        Senhas coincidem
-                      </li>
-                    </ul>
-                  </div>
-
-                  <Separator />
-
                   <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      className="bg-teal-600 hover:bg-teal-700"
-                      disabled={changePasswordMutation.isPending}
-                    >
+                    <Button type="submit" disabled={changePasswordMutation.isPending}>
                       {changePasswordMutation.isPending ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                          Alterando...
-                        </>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <>
-                          <Lock className="w-4 h-4 mr-2" />
-                          Alterar Senha
-                        </>
+                        <Lock className="mr-2 h-4 w-4" />
                       )}
+                      Alterar Senha
                     </Button>
                   </div>
                 </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Activity Tab */}
+          <TabsContent value="activity">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  Histórico de Atividades
+                </CardTitle>
+                <CardDescription>
+                  Suas últimas ações no sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {activitiesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : activities && activities.length > 0 ? (
+                  <ScrollArea className="h-[400px] pr-4">
+                    <div className="space-y-4">
+                      {activities.map((activity) => (
+                        <div
+                          key={activity.id}
+                          className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                        >
+                          <div className="flex-shrink-0 mt-1">
+                            {activityIcons[activity.activityType] || <CheckCircle2 className="h-4 w-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium">{activity.description || activity.activityType}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatDate(activity.createdAt)}
+                            </p>
+                            {activity.ipAddress && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                IP: {activity.ipAddress}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Nenhuma atividade registrada ainda</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -412,93 +496,113 @@ export default function Perfil() {
           <TabsContent value="account">
             <Card>
               <CardHeader>
-                <CardTitle>Informações da Conta</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Informações da Conta
+                </CardTitle>
                 <CardDescription>
-                  Detalhes sobre sua conta e permissões no sistema.
+                  Detalhes sobre sua conta e permissões
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1">
-                      <Label className="text-slate-500">ID do Usuário</Label>
-                      <p className="font-mono text-sm bg-slate-100 px-3 py-2 rounded">{user.id}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-slate-500">Identificador Único</Label>
-                      <p className="font-mono text-sm bg-slate-100 px-3 py-2 rounded truncate">{user.openId}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-slate-500">Método de Login</Label>
-                      <p className="font-medium capitalize">{user.loginMethod || "OAuth"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-slate-500">Nível de Acesso</Label>
-                      <div>{getRoleBadge(user.role)}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-slate-500">Data de Criação</Label>
-                      <p className="font-medium">{formatDate(user.createdAt)}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-slate-500">Última Atualização</Label>
-                      <p className="font-medium">{formatDate(user.updatedAt)}</p>
-                    </div>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">ID do Usuário</Label>
+                    <p className="font-mono text-sm bg-muted px-3 py-2 rounded">{user.id}</p>
                   </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">Nível de Acesso</Label>
+                    <div>{getRoleBadge(user.role)}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Conta Criada
+                    </Label>
+                    <p className="text-sm">{formatDate(user.createdAt)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Último Acesso
+                    </Label>
+                    <p className="text-sm">{formatDate(user.lastSignedIn)}</p>
+                  </div>
+                </div>
 
-                  <Separator />
+                <Separator />
 
-                  {/* Permissions */}
-                  <div>
-                    <h4 className="font-medium text-slate-700 mb-3">Permissões do seu nível de acesso:</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {user.role === "admin" && (
-                        <>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Gerenciar usuários</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Importar dados</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Configurar sistema</span>
-                          </div>
-                        </>
-                      )}
-                      {["admin", "gestor"].includes(user.role) && (
-                        <>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Visualizar todos os dados</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Gerar relatórios</span>
-                          </div>
-                        </>
-                      )}
-                      {["admin", "gestor", "politico"].includes(user.role) && (
-                        <>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Acessar dashboard</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Visualizar mapas de calor</span>
-                          </div>
-                        </>
-                      )}
-                      {user.role === "demo" && (
-                        <div className="flex items-center gap-2 text-amber-600">
-                          <AlertCircle className="w-4 h-4" />
-                          <span>Acesso limitado à demonstração</span>
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Permissões do Nível de Acesso</h3>
+                  <div className="grid gap-3">
+                    {user.role === "admin" && (
+                      <>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Gerenciar usuários e permissões
                         </div>
-                      )}
-                    </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Importar e exportar dados
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Configurações do sistema
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Acesso completo a todos os relatórios
+                        </div>
+                      </>
+                    )}
+                    {user.role === "gestor" && (
+                      <>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Importar dados eleitorais
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Visualizar todos os dashboards
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Gerar relatórios executivos
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <AlertCircle className="h-4 w-4 text-amber-500" />
+                          Sem acesso a configurações do sistema
+                        </div>
+                      </>
+                    )}
+                    {user.role === "politico" && (
+                      <>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Visualizar dashboards de campanha
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Acessar mapas de calor
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <AlertCircle className="h-4 w-4 text-amber-500" />
+                          Sem acesso a importação de dados
+                        </div>
+                      </>
+                    )}
+                    {user.role === "demo" && (
+                      <>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          Visualizar dados de demonstração
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <AlertCircle className="h-4 w-4 text-amber-500" />
+                          Acesso limitado ao sistema
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
