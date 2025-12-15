@@ -77,3 +77,6 @@
 - [x] Adicionar marcadores interativos para bairros
 - [x] Criar camadas de dados (eleitores, votos nulos, partidos)
 - [x] Integrar filtros dinâmicos com o mapa
+
+## Correções
+- [ ] Corrigir landing page não aparecendo no deploy Vercel
