@@ -219,3 +219,9 @@
 - [x] Criar favicon a partir da logo
 - [x] Atualizar landing page com nova logo circular
 - [x] Manter cores existentes que combinam com a bússola
+
+## Integração Final Supabase e GitHub
+- [ ] Verificar conexão com banco Supabase
+- [ ] Testar operações de leitura/escrita no Supabase
+- [ ] Sincronizar código atualizado com GitHub
+- [ ] Verificar se todos os arquivos estão no repositório
