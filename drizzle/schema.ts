@@ -381,6 +381,41 @@ export const demoData = mysqlTable("demo_data", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ==================== BACKUPS AGENDADOS ====================
+
+export const scheduledBackups = mysqlTable("scheduled_backups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  dataTypes: json("dataTypes").notNull(), // ["users", "eleitorado", "resultados", "activities"]
+  frequency: mysqlEnum("frequency", ["daily", "weekly", "monthly"]).notNull(),
+  dayOfWeek: int("dayOfWeek"), // 0-6 for weekly
+  dayOfMonth: int("dayOfMonth"), // 1-31 for monthly
+  timeOfDay: varchar("timeOfDay", { length: 5 }).default("03:00"), // HH:MM
+  emailRecipients: json("emailRecipients"), // Array of emails
+  format: mysqlEnum("format", ["csv", "json"]).default("csv"),
+  isActive: boolean("isActive").default(true),
+  lastRunAt: timestamp("lastRunAt"),
+  nextRunAt: timestamp("nextRunAt"),
+  createdBy: int("createdBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const backupHistory = mysqlTable("backup_history", {
+  id: int("id").autoincrement().primaryKey(),
+  scheduledBackupId: int("scheduledBackupId").references(() => scheduledBackups.id),
+  status: mysqlEnum("status", ["success", "failed", "running"]).default("running"),
+  dataTypes: json("dataTypes"),
+  recordCounts: json("recordCounts"), // { users: 100, eleitorado: 5000, ... }
+  fileSize: int("fileSize"), // in bytes
+  fileUrl: text("fileUrl"),
+  errorMessage: text("errorMessage"),
+  emailSent: boolean("emailSent").default(false),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ==================== TYPES ====================
 
 export type Regiao = typeof regioes.$inferSelect;

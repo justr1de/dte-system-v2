@@ -36,6 +36,13 @@
       "when": 1765826788064,
       "tag": "0004_swift_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1765828626187,
+      "tag": "0005_loud_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

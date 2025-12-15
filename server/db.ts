@@ -865,3 +865,338 @@ export async function exportActivities(startDate?: Date, endDate?: Date) {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(userActivities.createdAt));
 }
+
+
+// ==================== BACKUPS AGENDADOS ====================
+
+import { scheduledBackups, backupHistory } from "../drizzle/schema";
+
+export async function getScheduledBackups() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: scheduledBackups.id,
+    name: scheduledBackups.name,
+    dataTypes: scheduledBackups.dataTypes,
+    frequency: scheduledBackups.frequency,
+    dayOfWeek: scheduledBackups.dayOfWeek,
+    dayOfMonth: scheduledBackups.dayOfMonth,
+    timeOfDay: scheduledBackups.timeOfDay,
+    emailRecipients: scheduledBackups.emailRecipients,
+    format: scheduledBackups.format,
+    isActive: scheduledBackups.isActive,
+    lastRunAt: scheduledBackups.lastRunAt,
+    nextRunAt: scheduledBackups.nextRunAt,
+    createdBy: scheduledBackups.createdBy,
+    createdByName: users.name,
+    createdAt: scheduledBackups.createdAt,
+  })
+    .from(scheduledBackups)
+    .leftJoin(users, eq(scheduledBackups.createdBy, users.id))
+    .orderBy(desc(scheduledBackups.createdAt));
+}
+
+export async function getScheduledBackupById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select()
+    .from(scheduledBackups)
+    .where(eq(scheduledBackups.id, id))
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function createScheduledBackup(data: {
+  name: string;
+  dataTypes: string[];
+  frequency: "daily" | "weekly" | "monthly";
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  timeOfDay?: string;
+  emailRecipients?: string[];
+  format?: "csv" | "json";
+  createdBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  // Calculate next run time
+  const nextRunAt = calculateNextRunTime(data.frequency, data.dayOfWeek, data.dayOfMonth, data.timeOfDay);
+  
+  const result = await db.insert(scheduledBackups).values({
+    name: data.name,
+    dataTypes: data.dataTypes,
+    frequency: data.frequency,
+    dayOfWeek: data.dayOfWeek,
+    dayOfMonth: data.dayOfMonth,
+    timeOfDay: data.timeOfDay || "03:00",
+    emailRecipients: data.emailRecipients,
+    format: data.format || "csv",
+    isActive: true,
+    nextRunAt,
+    createdBy: data.createdBy,
+  });
+  return result[0].insertId;
+}
+
+export async function updateScheduledBackup(id: number, data: {
+  name?: string;
+  dataTypes?: string[];
+  frequency?: "daily" | "weekly" | "monthly";
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  timeOfDay?: string;
+  emailRecipients?: string[];
+  format?: "csv" | "json";
+  isActive?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const updateData: Record<string, unknown> = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.dataTypes !== undefined) updateData.dataTypes = data.dataTypes;
+  if (data.frequency !== undefined) updateData.frequency = data.frequency;
+  if (data.dayOfWeek !== undefined) updateData.dayOfWeek = data.dayOfWeek;
+  if (data.dayOfMonth !== undefined) updateData.dayOfMonth = data.dayOfMonth;
+  if (data.timeOfDay !== undefined) updateData.timeOfDay = data.timeOfDay;
+  if (data.emailRecipients !== undefined) updateData.emailRecipients = data.emailRecipients;
+  if (data.format !== undefined) updateData.format = data.format;
+  if (data.isActive !== undefined) updateData.isActive = data.isActive;
+  
+  // Recalculate next run time if frequency changed
+  if (data.frequency || data.dayOfWeek !== undefined || data.dayOfMonth !== undefined || data.timeOfDay) {
+    const backup = await getScheduledBackupById(id);
+    if (backup) {
+      updateData.nextRunAt = calculateNextRunTime(
+        data.frequency || backup.frequency,
+        data.dayOfWeek ?? backup.dayOfWeek ?? undefined,
+        data.dayOfMonth ?? backup.dayOfMonth ?? undefined,
+        data.timeOfDay || backup.timeOfDay || "03:00"
+      );
+    }
+  }
+  
+  await db.update(scheduledBackups).set(updateData).where(eq(scheduledBackups.id, id));
+}
+
+export async function deleteScheduledBackup(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(scheduledBackups).where(eq(scheduledBackups.id, id));
+}
+
+export async function toggleScheduledBackup(id: number, isActive: boolean) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(scheduledBackups).set({ isActive }).where(eq(scheduledBackups.id, id));
+}
+
+// ==================== HISTÓRICO DE BACKUPS ====================
+
+export async function getBackupHistory(limit = 50, scheduledBackupId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = [];
+  if (scheduledBackupId) conditions.push(eq(backupHistory.scheduledBackupId, scheduledBackupId));
+  
+  return db.select({
+    id: backupHistory.id,
+    scheduledBackupId: backupHistory.scheduledBackupId,
+    backupName: scheduledBackups.name,
+    status: backupHistory.status,
+    dataTypes: backupHistory.dataTypes,
+    recordCounts: backupHistory.recordCounts,
+    fileSize: backupHistory.fileSize,
+    fileUrl: backupHistory.fileUrl,
+    errorMessage: backupHistory.errorMessage,
+    emailSent: backupHistory.emailSent,
+    startedAt: backupHistory.startedAt,
+    completedAt: backupHistory.completedAt,
+  })
+    .from(backupHistory)
+    .leftJoin(scheduledBackups, eq(backupHistory.scheduledBackupId, scheduledBackups.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(backupHistory.startedAt))
+    .limit(limit);
+}
+
+export async function createBackupHistoryEntry(data: {
+  scheduledBackupId?: number;
+  dataTypes: string[];
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(backupHistory).values({
+    scheduledBackupId: data.scheduledBackupId,
+    dataTypes: data.dataTypes,
+    status: "running",
+  });
+  return result[0].insertId;
+}
+
+export async function updateBackupHistoryEntry(id: number, data: {
+  status?: "success" | "failed" | "running";
+  recordCounts?: Record<string, number>;
+  fileSize?: number;
+  fileUrl?: string;
+  errorMessage?: string;
+  emailSent?: boolean;
+  completedAt?: Date;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(backupHistory).set(data).where(eq(backupHistory.id, id));
+}
+
+// ==================== MÉTRICAS COMPARATIVAS ====================
+
+export async function getComparativeStats(currentStart: Date, currentEnd: Date, previousStart: Date, previousEnd: Date) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Atividades do período atual
+  const currentActivities = await db.select({ count: count() })
+    .from(userActivities)
+    .where(and(
+      gte(userActivities.createdAt, currentStart),
+      lte(userActivities.createdAt, currentEnd)
+    ));
+
+  // Atividades do período anterior
+  const previousActivities = await db.select({ count: count() })
+    .from(userActivities)
+    .where(and(
+      gte(userActivities.createdAt, previousStart),
+      lte(userActivities.createdAt, previousEnd)
+    ));
+
+  // Novos usuários no período atual
+  const currentNewUsers = await db.select({ count: count() })
+    .from(users)
+    .where(and(
+      gte(users.createdAt, currentStart),
+      lte(users.createdAt, currentEnd)
+    ));
+
+  // Novos usuários no período anterior
+  const previousNewUsers = await db.select({ count: count() })
+    .from(users)
+    .where(and(
+      gte(users.createdAt, previousStart),
+      lte(users.createdAt, previousEnd)
+    ));
+
+  // Importações no período atual
+  const currentImports = await db.select({ count: count() })
+    .from(importacoes)
+    .where(and(
+      gte(importacoes.createdAt, currentStart),
+      lte(importacoes.createdAt, currentEnd)
+    ));
+
+  // Importações no período anterior
+  const previousImports = await db.select({ count: count() })
+    .from(importacoes)
+    .where(and(
+      gte(importacoes.createdAt, previousStart),
+      lte(importacoes.createdAt, previousEnd)
+    ));
+
+  // Logins no período atual
+  const currentLogins = await db.select({ count: count() })
+    .from(userActivities)
+    .where(and(
+      gte(userActivities.createdAt, currentStart),
+      lte(userActivities.createdAt, currentEnd),
+      eq(userActivities.activityType, "login")
+    ));
+
+  // Logins no período anterior
+  const previousLogins = await db.select({ count: count() })
+    .from(userActivities)
+    .where(and(
+      gte(userActivities.createdAt, previousStart),
+      lte(userActivities.createdAt, previousEnd),
+      eq(userActivities.activityType, "login")
+    ));
+
+  // Atividades por dia no período atual
+  const activitiesByDayCurrent = await db.select({
+    date: sql<string>`DATE(${userActivities.createdAt})`,
+    count: count(),
+  })
+    .from(userActivities)
+    .where(and(
+      gte(userActivities.createdAt, currentStart),
+      lte(userActivities.createdAt, currentEnd)
+    ))
+    .groupBy(sql`DATE(${userActivities.createdAt})`)
+    .orderBy(sql`DATE(${userActivities.createdAt})`);
+
+  // Atividades por dia no período anterior
+  const activitiesByDayPrevious = await db.select({
+    date: sql<string>`DATE(${userActivities.createdAt})`,
+    count: count(),
+  })
+    .from(userActivities)
+    .where(and(
+      gte(userActivities.createdAt, previousStart),
+      lte(userActivities.createdAt, previousEnd)
+    ))
+    .groupBy(sql`DATE(${userActivities.createdAt})`)
+    .orderBy(sql`DATE(${userActivities.createdAt})`);
+
+  return {
+    current: {
+      activities: Number(currentActivities[0]?.count || 0),
+      newUsers: Number(currentNewUsers[0]?.count || 0),
+      imports: Number(currentImports[0]?.count || 0),
+      logins: Number(currentLogins[0]?.count || 0),
+      activitiesByDay: activitiesByDayCurrent,
+    },
+    previous: {
+      activities: Number(previousActivities[0]?.count || 0),
+      newUsers: Number(previousNewUsers[0]?.count || 0),
+      imports: Number(previousImports[0]?.count || 0),
+      logins: Number(previousLogins[0]?.count || 0),
+      activitiesByDay: activitiesByDayPrevious,
+    },
+  };
+}
+
+// Helper function to calculate next run time
+function calculateNextRunTime(
+  frequency: "daily" | "weekly" | "monthly",
+  dayOfWeek?: number,
+  dayOfMonth?: number,
+  timeOfDay?: string
+): Date {
+  const now = new Date();
+  const [hours, minutes] = (timeOfDay || "03:00").split(":").map(Number);
+  const next = new Date(now);
+  next.setHours(hours, minutes, 0, 0);
+
+  if (frequency === "daily") {
+    if (next <= now) {
+      next.setDate(next.getDate() + 1);
+    }
+  } else if (frequency === "weekly") {
+    const targetDay = dayOfWeek ?? 0; // Default to Sunday
+    const currentDay = next.getDay();
+    let daysUntilTarget = targetDay - currentDay;
+    if (daysUntilTarget < 0 || (daysUntilTarget === 0 && next <= now)) {
+      daysUntilTarget += 7;
+    }
+    next.setDate(next.getDate() + daysUntilTarget);
+  } else if (frequency === "monthly") {
+    const targetDayOfMonth = dayOfMonth ?? 1;
+    next.setDate(targetDayOfMonth);
+    if (next <= now) {
+      next.setMonth(next.getMonth() + 1);
+    }
+  }
+
+  return next;
+}

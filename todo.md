@@ -156,3 +156,15 @@
 - [x] Implementar exportação de eleitores em CSV/Excel
 - [x] Implementar exportação de resultados eleitorais
 - [x] Implementar exportação de usuários do sistema
+
+## Agendamento de Backups Automáticos
+- [x] Criar tabela de configuração de backups agendados
+- [x] Implementar interface de configuração de periodicidade
+- [x] Adicionar opção de envio por email
+- [x] Criar histórico de backups executados
+
+## Dashboard Comparativo
+- [x] Criar página de comparação de métricas
+- [x] Implementar comparação semana atual vs anterior
+- [x] Implementar comparação mês atual vs anterior
+- [x] Adicionar gráficos de tendência

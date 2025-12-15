@@ -639,6 +639,140 @@ const backupRouter = router({
     }),
 });
 
+// ==================== SCHEDULED BACKUPS ROUTER ====================
+
+const scheduledBackupsRouter = router({
+  list: adminProcedure.query(async () => {
+    return db.getScheduledBackups();
+  }),
+  get: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      return db.getScheduledBackupById(input.id);
+    }),
+  create: adminProcedure
+    .input(
+      z.object({
+        name: z.string(),
+        dataTypes: z.array(z.string()),
+        frequency: z.enum(["daily", "weekly", "monthly"]),
+        dayOfWeek: z.number().optional(),
+        dayOfMonth: z.number().optional(),
+        timeOfDay: z.string().optional(),
+        emailRecipients: z.array(z.string()).optional(),
+        format: z.enum(["csv", "json"]).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const id = await db.createScheduledBackup({
+        ...input,
+        createdBy: ctx.user.id,
+      });
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "create",
+        description: `Backup agendado '${input.name}' criado`,
+      });
+      return { success: true, id };
+    }),
+  update: adminProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        dataTypes: z.array(z.string()).optional(),
+        frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
+        dayOfWeek: z.number().optional(),
+        dayOfMonth: z.number().optional(),
+        timeOfDay: z.string().optional(),
+        emailRecipients: z.array(z.string()).optional(),
+        format: z.enum(["csv", "json"]).optional(),
+        isActive: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { id, ...data } = input;
+      await db.updateScheduledBackup(id, data);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "update",
+        description: `Backup agendado atualizado`,
+      });
+      return { success: true };
+    }),
+  delete: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.deleteScheduledBackup(input.id);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "delete",
+        description: `Backup agendado removido`,
+      });
+      return { success: true };
+    }),
+  toggle: adminProcedure
+    .input(z.object({ id: z.number(), isActive: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.toggleScheduledBackup(input.id, input.isActive);
+      await db.logUserActivity({
+        userId: ctx.user.id,
+        activityType: "update",
+        description: `Backup agendado ${input.isActive ? "ativado" : "desativado"}`,
+      });
+      return { success: true };
+    }),
+  history: adminProcedure
+    .input(
+      z.object({
+        limit: z.number().optional(),
+        scheduledBackupId: z.number().optional(),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      return db.getBackupHistory(input?.limit, input?.scheduledBackupId);
+    }),
+});
+
+// ==================== COMPARATIVE STATS ROUTER ====================
+
+const comparativeRouter = router({
+  stats: adminProcedure
+    .input(
+      z.object({
+        period: z.enum(["week", "month"]),
+      })
+    )
+    .query(async ({ input }) => {
+      const now = new Date();
+      let currentStart: Date, currentEnd: Date, previousStart: Date, previousEnd: Date;
+
+      if (input.period === "week") {
+        // Current week (last 7 days)
+        currentEnd = new Date(now);
+        currentStart = new Date(now);
+        currentStart.setDate(currentStart.getDate() - 7);
+        
+        // Previous week (7-14 days ago)
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 7);
+      } else {
+        // Current month (last 30 days)
+        currentEnd = new Date(now);
+        currentStart = new Date(now);
+        currentStart.setDate(currentStart.getDate() - 30);
+        
+        // Previous month (30-60 days ago)
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 30);
+      }
+
+      return db.getComparativeStats(currentStart, currentEnd, previousStart, previousEnd);
+    }),
+});
+
 // ==================== SETTINGS ROUTER ====================
 
 const settingsRouter = router({
@@ -697,6 +831,8 @@ export const appRouter = router({
   adminReports: adminReportsRouter,
   audit: auditRouter,
   backup: backupRouter,
+  scheduledBackups: scheduledBackupsRouter,
+  comparative: comparativeRouter,
 });
 
 export type AppRouter = typeof appRouter;
