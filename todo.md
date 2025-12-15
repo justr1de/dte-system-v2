@@ -221,7 +221,7 @@
 - [x] Manter cores existentes que combinam com a bússola
 
 ## Integração Final Supabase e GitHub
-- [ ] Verificar conexão com banco Supabase
-- [ ] Testar operações de leitura/escrita no Supabase
-- [ ] Sincronizar código atualizado com GitHub
-- [ ] Verificar se todos os arquivos estão no repositório
+- [x] Verificar conexão com banco Supabase
+- [x] Testar operações de leitura/escrita no Supabase
+- [x] Sincronizar código atualizado com GitHub
+- [x] Verificar se todos os arquivos estão no repositório
