@@ -190,3 +190,19 @@
 - [x] Implementar geração de PDF do dashboard comparativo
 - [x] Adicionar botão de exportar PDF
 - [x] Incluir gráficos e métricas no PDF
+
+## Integração Supabase
+- [x] Solicitar credenciais do Supabase
+- [x] Configurar conexão com banco Supabase
+- [ ] Migrar schema para Supabase (opcional - usando banco Manus atual)
+
+## CI/CD com GitHub Actions
+- [x] Criar workflow de testes automatizados
+- [x] Criar workflow de build e deploy
+- [ ] Configurar secrets no GitHub (manual pelo usuário)
+
+## Documentação README
+- [x] Criar README.md com descrição do projeto
+- [x] Adicionar instruções de instalação
+- [x] Documentar variáveis de ambiente
+- [x] Adicionar estrutura do projeto e convenções
