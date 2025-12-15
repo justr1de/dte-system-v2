@@ -206,3 +206,11 @@
 - [x] Adicionar instruções de instalação
 - [x] Documentar variáveis de ambiente
 - [x] Adicionar estrutura do projeto e convenções
+
+## Nova Logo DTE
+- [x] Copiar logo para o projeto
+- [x] Aplicar formato circular à logo
+- [x] Adicionar logo na tela de login
+- [x] Adicionar logo no layout principal (sidebar)
+- [x] Exibir texto "DATA TRACKING ELEITORAL - DTE" ao lado
+- [x] Criar botão de logout que volta para login

@@ -96,12 +96,18 @@ export default function Login() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <img
-            src="/dataro-logo.jpeg"
-            alt="DATA-RO"
-            className="h-20 w-auto mx-auto mb-4 rounded-xl"
-          />
-          <h1 className="text-2xl font-bold text-white">Data Tracking Eleitoral</h1>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <img
+              src="/logo-dte.png"
+              alt="DTE Logo"
+              className="h-20 w-20 rounded-full object-cover shadow-lg shadow-teal-500/20 border-2 border-teal-500/30"
+            />
+            <div className="text-left">
+              <h1 className="text-xl font-bold text-white leading-tight">DATA TRACKING</h1>
+              <h1 className="text-xl font-bold text-white leading-tight">ELEITORAL</h1>
+              <p className="text-teal-400 font-semibold text-lg">DTE</p>
+            </div>
+          </div>
           <p className="text-slate-400 mt-2">Sistema de Análise de Dados Eleitorais</p>
         </div>
 

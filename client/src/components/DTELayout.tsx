@@ -154,11 +154,11 @@ export function DTELayout({ children }: { children: React.ReactNode }) {
           </button>
           <Link href="/dashboard" className="flex items-center gap-2">
             <img 
-              src="/dataro-logo.jpeg" 
-              alt="DATA-RO" 
-              className="w-10 h-10 rounded-lg shadow"
+              src="/logo-dte.png" 
+              alt="DTE Logo" 
+              className="w-10 h-10 rounded-full object-cover shadow border border-teal-500/30"
             />
-            <span className="font-semibold">DTE</span>
+            <span className="font-semibold text-sm">DATA TRACKING ELEITORAL - DTE</span>
           </Link>
           <div className="w-10" />
         </div>
@@ -184,13 +184,13 @@ export function DTELayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between px-6 h-16 border-b border-sidebar-border">
             <Link href="/dashboard" className="flex items-center gap-3">
               <img 
-                src="/dataro-logo.jpeg" 
-                alt="DATA-RO" 
-                className="w-12 h-12 rounded-xl shadow-lg"
+                src="/logo-dte.png" 
+                alt="DTE Logo" 
+                className="w-12 h-12 rounded-full object-cover shadow-lg border-2 border-teal-500/30"
               />
               <div>
-                <h1 className="font-bold text-lg text-sidebar-foreground">DTE</h1>
-                <p className="text-xs text-muted-foreground">Data Tracking Eleitoral</p>
+                <h1 className="font-bold text-sm text-sidebar-foreground leading-tight">DATA TRACKING</h1>
+                <h1 className="font-bold text-sm text-sidebar-foreground leading-tight">ELEITORAL - DTE</h1>
               </div>
             </Link>
             <button
@@ -302,7 +302,10 @@ export function DTELayout({ children }: { children: React.ReactNode }) {
                       Meu Perfil
                     </DropdownMenuItem>
                   </Link>
-                  <DropdownMenuItem onClick={() => logout()}>
+                  <DropdownMenuItem onClick={() => {
+                    logout();
+                    window.location.href = "/login";
+                  }}>
                     <LogOut className="w-4 h-4 mr-2" />
                     Sair
                   </DropdownMenuItem>
