@@ -1,28 +1,431 @@
 import { COOKIE_NAME } from "@shared/const";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import * as db from "./db";
+
+// ==================== ROLE-BASED PROCEDURES ====================
+
+const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito a administradores" });
+  }
+  return next({ ctx });
+});
+
+const gestorProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!["admin", "gestor"].includes(ctx.user.role)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito a gestores e administradores" });
+  }
+  return next({ ctx });
+});
+
+const politicoProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!["admin", "gestor", "politico"].includes(ctx.user.role)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito" });
+  }
+  return next({ ctx });
+});
+
+// ==================== ROUTERS ====================
+
+const authRouter = router({
+  me: publicProcedure.query((opts) => opts.ctx.user),
+  logout: publicProcedure.mutation(({ ctx }) => {
+    const cookieOptions = getSessionCookieOptions(ctx.req);
+    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    return { success: true } as const;
+  }),
+});
+
+const usersRouter = router({
+  list: adminProcedure.query(async () => {
+    return db.getAllUsers();
+  }),
+  updateRole: adminProcedure
+    .input(
+      z.object({
+        userId: z.number(),
+        role: z.enum(["admin", "gestor", "politico", "demo"]),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await db.updateUserRole(input.userId, input.role);
+      return { success: true };
+    }),
+});
+
+const geografiaRouter = router({
+  regioes: publicProcedure.query(async () => {
+    return db.getRegioes();
+  }),
+  municipios: publicProcedure
+    .input(z.object({ regiaoId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.getMunicipios(input?.regiaoId);
+    }),
+  bairros: publicProcedure
+    .input(z.object({ municipioId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.getBairros(input?.municipioId);
+    }),
+  zonasEleitorais: publicProcedure
+    .input(z.object({ municipioId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.getZonasEleitorais(input?.municipioId);
+    }),
+});
+
+const eleitoradoRouter = router({
+  stats: publicProcedure
+    .input(
+      z
+        .object({
+          anoEleicao: z.number().optional(),
+          municipioId: z.number().optional(),
+          bairroId: z.number().optional(),
+          zonaId: z.number().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      return db.getEleitoradoStats(input);
+    }),
+  porBairro: publicProcedure
+    .input(
+      z.object({
+        anoEleicao: z.number(),
+        municipioId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return db.getEleitoradoPorBairro(input.anoEleicao, input.municipioId);
+    }),
+});
+
+const partidosRouter = router({
+  list: publicProcedure.query(async () => {
+    return db.getPartidos();
+  }),
+});
+
+const candidatosRouter = router({
+  list: publicProcedure
+    .input(
+      z
+        .object({
+          anoEleicao: z.number().optional(),
+          cargo: z.string().optional(),
+          partidoId: z.number().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      return db.getCandidatos(input);
+    }),
+});
+
+const resultadosRouter = router({
+  porPartido: publicProcedure
+    .input(
+      z.object({
+        anoEleicao: z.number(),
+        cargo: z.string(),
+        municipioId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return db.getResultadosPorPartido(input);
+    }),
+  porCandidato: publicProcedure
+    .input(
+      z.object({
+        anoEleicao: z.number(),
+        cargo: z.string(),
+        municipioId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return db.getResultadosPorCandidato(input);
+    }),
+  comparacao: publicProcedure
+    .input(
+      z.object({
+        cargo: z.string(),
+        municipioId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return db.getComparacaoEleicoes(input.cargo, input.municipioId);
+    }),
+});
+
+const votosNulosBrancosRouter = router({
+  stats: publicProcedure
+    .input(
+      z
+        .object({
+          anoEleicao: z.number().optional(),
+          cargo: z.string().optional(),
+          municipioId: z.number().optional(),
+          bairroId: z.number().optional(),
+          zonaId: z.number().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      return db.getVotosNulosBrancosStats(input);
+    }),
+  porRegiao: publicProcedure
+    .input(
+      z.object({
+        anoEleicao: z.number(),
+        cargo: z.string(),
+      })
+    )
+    .query(async ({ input }) => {
+      return db.getVotosNulosBrancosPorRegiao(input);
+    }),
+  evolucao: publicProcedure
+    .input(
+      z.object({
+        cargo: z.string(),
+        municipioId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return db.getEvolucaoVotosNulosBrancos(input.cargo, input.municipioId);
+    }),
+});
+
+const dashboardRouter = router({
+  stats: publicProcedure.query(async () => {
+    return db.getDashboardStats();
+  }),
+});
+
+const importacoesRouter = router({
+  list: gestorProcedure.query(async ({ ctx }) => {
+    if (ctx.user.role === "admin") {
+      return db.getImportacoes();
+    }
+    return db.getImportacoes(ctx.user.id);
+  }),
+  create: gestorProcedure
+    .input(
+      z.object({
+        nomeArquivo: z.string(),
+        tipoArquivo: z.string(),
+        tipoDataset: z.string(),
+        anoReferencia: z.number().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const id = await db.createImportacao({
+        userId: ctx.user.id,
+        ...input,
+      });
+      return { id };
+    }),
+  update: gestorProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        status: z.enum(["pendente", "processando", "concluido", "erro"]).optional(),
+        totalRegistros: z.number().optional(),
+        registrosImportados: z.number().optional(),
+        registrosErro: z.number().optional(),
+        mensagemErro: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateImportacao(id, data);
+      return { success: true };
+    }),
+  processData: gestorProcedure
+    .input(
+      z.object({
+        importacaoId: z.number(),
+        tipoDataset: z.string(),
+        data: z.array(z.record(z.string(), z.unknown())),
+        anoReferencia: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { importacaoId, tipoDataset, data, anoReferencia } = input;
+
+      try {
+        await db.updateImportacao(importacaoId, { status: "processando", totalRegistros: data.length });
+
+        let registrosImportados = 0;
+        let registrosErro = 0;
+
+        if (tipoDataset === "eleitorado") {
+          const records = data.map((row: any) => ({
+            anoEleicao: anoReferencia || new Date().getFullYear(),
+            totalEleitores: parseInt(row.totalEleitores || row.total_eleitores || "0"),
+            eleitoresMasculino: parseInt(row.masculino || row.eleitores_masculino || "0"),
+            eleitoresFeminino: parseInt(row.feminino || row.eleitores_feminino || "0"),
+            faixa16a17: parseInt(row.faixa_16_17 || row.faixa16a17 || "0"),
+            faixa18a24: parseInt(row.faixa_18_24 || row.faixa18a24 || "0"),
+            faixa25a34: parseInt(row.faixa_25_34 || row.faixa25a34 || "0"),
+            faixa35a44: parseInt(row.faixa_35_44 || row.faixa35a44 || "0"),
+            faixa45a59: parseInt(row.faixa_45_59 || row.faixa45a59 || "0"),
+            faixa60a69: parseInt(row.faixa_60_69 || row.faixa60a69 || "0"),
+            faixa70mais: parseInt(row.faixa_70_mais || row.faixa70mais || "0"),
+            escolaridadeAnalfabeto: parseInt(row.analfabeto || row.escolaridade_analfabeto || "0"),
+            escolaridadeFundamental: parseInt(row.fundamental || row.escolaridade_fundamental || "0"),
+            escolaridadeMedio: parseInt(row.medio || row.escolaridade_medio || "0"),
+            escolaridadeSuperior: parseInt(row.superior || row.escolaridade_superior || "0"),
+          }));
+          await db.bulkInsertEleitorado(records);
+          registrosImportados = records.length;
+        } else if (tipoDataset === "votos_nulos_brancos") {
+          const records = data.map((row: any) => ({
+            anoEleicao: anoReferencia || new Date().getFullYear(),
+            cargo: row.cargo || "Prefeito",
+            turno: parseInt(row.turno || "1"),
+            votosNulos: parseInt(row.votos_nulos || row.nulos || "0"),
+            votosBrancos: parseInt(row.votos_brancos || row.brancos || "0"),
+            abstencoes: parseInt(row.abstencoes || "0"),
+            totalAptos: parseInt(row.total_aptos || row.aptos || "0"),
+            comparecimento: parseInt(row.comparecimento || "0"),
+          }));
+          await db.bulkInsertVotosNulosBrancos(records);
+          registrosImportados = records.length;
+        } else if (tipoDataset === "resultados") {
+          const records = data.map((row: any) => ({
+            anoEleicao: anoReferencia || new Date().getFullYear(),
+            cargo: row.cargo || "Prefeito",
+            turno: parseInt(row.turno || "1"),
+            votosValidos: parseInt(row.votos_validos || row.votos || "0"),
+            votosNominais: parseInt(row.votos_nominais || "0"),
+            votosLegenda: parseInt(row.votos_legenda || "0"),
+          }));
+          await db.bulkInsertResultados(records);
+          registrosImportados = records.length;
+        }
+
+        await db.updateImportacao(importacaoId, {
+          status: "concluido",
+          registrosImportados,
+          registrosErro,
+        });
+
+        return { success: true, registrosImportados, registrosErro };
+      } catch (error: any) {
+        await db.updateImportacao(importacaoId, {
+          status: "erro",
+          mensagemErro: error.message,
+        });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      }
+    }),
+});
+
+const demoRouter = router({
+  getData: publicProcedure
+    .input(z.object({ dataType: z.string().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.getDemoData(input?.dataType);
+    }),
+  seedDemoData: adminProcedure.mutation(async () => {
+    // Seed demo data for demonstration
+    const demoEleitorado = {
+      dataType: "eleitorado_demo",
+      dataContent: {
+        totalEleitores: 245678,
+        masculino: 118234,
+        feminino: 127444,
+        faixasEtarias: {
+          "16-17": 4521,
+          "18-24": 32456,
+          "25-34": 48923,
+          "35-44": 52341,
+          "45-59": 58234,
+          "60-69": 32145,
+          "70+": 17058,
+        },
+        escolaridade: {
+          analfabeto: 8234,
+          fundamental: 45678,
+          medio: 98234,
+          superior: 93532,
+        },
+      },
+      description: "Dados de demonstração do eleitorado",
+    };
+
+    const demoVotosNulosBrancos = {
+      dataType: "votos_nulos_brancos_demo",
+      dataContent: {
+        anos: [2020, 2022, 2024],
+        dados: [
+          { ano: 2020, nulos: 12345, brancos: 8765, abstencoes: 34567, aptos: 230000 },
+          { ano: 2022, nulos: 11234, brancos: 7654, abstencoes: 32456, aptos: 238000 },
+          { ano: 2024, nulos: 10123, brancos: 6543, abstencoes: 30345, aptos: 245678 },
+        ],
+      },
+      description: "Dados de demonstração de votos nulos e brancos",
+    };
+
+    const demoResultados = {
+      dataType: "resultados_demo",
+      dataContent: {
+        partidos: [
+          { sigla: "PT", votos: 45678, cor: "#FF0000" },
+          { sigla: "PL", votos: 42345, cor: "#0000FF" },
+          { sigla: "MDB", votos: 38234, cor: "#00FF00" },
+          { sigla: "PSDB", votos: 28456, cor: "#FFFF00" },
+          { sigla: "PP", votos: 22345, cor: "#FF00FF" },
+          { sigla: "OUTROS", votos: 45678, cor: "#808080" },
+        ],
+      },
+      description: "Dados de demonstração de resultados eleitorais",
+    };
+
+    const demoBairros = {
+      dataType: "bairros_demo",
+      dataContent: [
+        { nome: "Centro", eleitores: 25678, latitude: "-8.7619", longitude: "-63.9039", nulos: 1234, brancos: 876 },
+        { nome: "Nova Porto Velho", eleitores: 18234, latitude: "-8.7520", longitude: "-63.8940", nulos: 987, brancos: 654 },
+        { nome: "Embratel", eleitores: 15678, latitude: "-8.7421", longitude: "-63.8841", nulos: 876, brancos: 543 },
+        { nome: "Caiari", eleitores: 12345, latitude: "-8.7322", longitude: "-63.8742", nulos: 765, brancos: 432 },
+        { nome: "São Cristóvão", eleitores: 11234, latitude: "-8.7223", longitude: "-63.8643", nulos: 654, brancos: 321 },
+        { nome: "Arigolândia", eleitores: 9876, latitude: "-8.7124", longitude: "-63.8544", nulos: 543, brancos: 210 },
+        { nome: "Pedrinhas", eleitores: 8765, latitude: "-8.7025", longitude: "-63.8445", nulos: 432, brancos: 198 },
+        { nome: "Tancredo Neves", eleitores: 7654, latitude: "-8.6926", longitude: "-63.8346", nulos: 321, brancos: 187 },
+      ],
+      description: "Dados de demonstração por bairro",
+    };
+
+    await db.insertDemoData({ dataType: demoEleitorado.dataType, dataContent: demoEleitorado.dataContent, description: demoEleitorado.description });
+    await db.insertDemoData({ dataType: demoVotosNulosBrancos.dataType, dataContent: demoVotosNulosBrancos.dataContent, description: demoVotosNulosBrancos.description });
+    await db.insertDemoData({ dataType: demoResultados.dataType, dataContent: demoResultados.dataContent, description: demoResultados.description });
+    await db.insertDemoData({ dataType: demoBairros.dataType, dataContent: demoBairros.dataContent, description: demoBairros.description });
+
+    return { success: true };
+  }),
+});
+
+// ==================== MAIN ROUTER ====================
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
-  }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  auth: authRouter,
+  users: usersRouter,
+  geografia: geografiaRouter,
+  eleitorado: eleitoradoRouter,
+  partidos: partidosRouter,
+  candidatos: candidatosRouter,
+  resultados: resultadosRouter,
+  votosNulosBrancos: votosNulosBrancosRouter,
+  dashboard: dashboardRouter,
+  importacoes: importacoesRouter,
+  demo: demoRouter,
 });
 
 export type AppRouter = typeof appRouter;
