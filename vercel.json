@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
-  "installCommand": "pnpm install",
+  "installCommand": "corepack enable && pnpm install",
   "framework": null,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
